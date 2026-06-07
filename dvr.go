@@ -13,6 +13,10 @@ const (
 	DVRPrivacyBlocked        = DVRPrivacy("Blocked")
 	DVRPrivacyEveryone       = DVRPrivacy("Everyone")
 	DVRPrivacyPeopleOnMyList = DVRPrivacy("PeopleOnMyList")
+
+	// dvrURITypeDownload identifies the downloadable media URI within a capture's
+	// list of URIs (as opposed to thumbnails or other derivatives).
+	dvrURITypeDownload = 2
 )
 
 type (
@@ -20,49 +24,52 @@ type (
 	DVRPrivacy     string
 )
 
-type DVRCapture struct {
-	ID              string `json:"contentId"`
-	ContentLocators []struct {
-		Expiration  time.Time `json:"expiration,omitempty"` // Only exists for screenshots
-		FileSize    int       `json:"fileSize,omitempty"`
-		LocatorType string    `json:"locatorType"`
-		URI         string    `json:"uri"`
-	} `json:"contentLocators"`
-	CreationType     string         `json:"creationType"` // E.g. UserGenerated
-	GreatestMomentID string         `json:"greatestMomentId"`
-	LocalID          string         `json:"localId"`
-	OwnerXUID        int64          `json:"ownerXuid"`
-	ResolutionHeight int            `json:"resolutionHeight"`
-	ResolutionWidth  int            `json:"resolutionWidth"`
-	SandboxID        string         `json:"sandboxId"`
-	SharedTo         []interface{}  `json:"sharedTo"`
-	TitleData        string         `json:"titleData"`
-	TitleID          int            `json:"titleId"`   // Game's ID
-	TitleName        string         `json:"titleName"` // Game's name
-	UploadDate       time.Time      `json:"uploadDate"`
-	UploadLanguage   string         `json:"uploadLanguage"`
-	UploadRegion     string         `json:"uploadRegion"`
-	UploadTitleID    int            `json:"uploadTitleId"`
-	UploadDeviceType string         `json:"uploadDeviceType"`
-	UserCaption      string         `json:"userCaption"`
-	CommentCount     int            `json:"commentCount"`
-	LikeCount        int            `json:"likeCount"`
-	ShareCount       int            `json:"shareCount"`
-	ViewCount        int            `json:"viewCount"`
-	ContentState     string         `json:"contentState"`
-	EnforcementState string         `json:"enforcementState"`
-	SafetyThreshold  string         `json:"safetyThreshold"`
-	Sessions         []interface{}  `json:"sessions"`
-	Tournaments      []interface{}  `json:"tournaments"`
-	Type             DVRCaptureType `json:"captureType"`
+// DVRContentURI is a single addressable URI for a capture's media.
+type DVRContentURI struct {
+	URI        string    `json:"uri"`
+	FileSize   int64     `json:"fileSize"`
+	URIType    int       `json:"uriType"`
+	Expiration time.Time `json:"expiration"`
 }
 
-// GetDownloadLink iterates over the ContentLocators and looks for a valid Download type. If found, it returns the URI.
+// DVRThumbnail is a single thumbnail for a capture.
+type DVRThumbnail struct {
+	URI           string `json:"uri"`
+	FileSize      int64  `json:"fileSize"`
+	ThumbnailType int    `json:"thumbnailType"`
+}
+
+// DVRCapture holds the fields common to clips and screenshots. ID, UploadDate,
+// ContentURIs, and Type are normalized by the client from the type-specific keys
+// the API returns (e.g. gameClipId/screenshotId, dateRecorded/dateTaken).
+type DVRCapture struct {
+	ID            string          `json:"-"`         // gameClipId or screenshotId
+	TitleID       int             `json:"titleId"`   // Game's ID
+	TitleName     string          `json:"titleName"` // Game's name
+	XUID          string          `json:"xuid"`
+	DeviceType    string          `json:"deviceType"`
+	State         int             `json:"state"`
+	UserCaption   string          `json:"userCaption"`
+	DatePublished time.Time       `json:"datePublished"`
+	LastModified  time.Time       `json:"lastModified"`
+	UploadDate    time.Time       `json:"-"` // dateRecorded or dateTaken
+	Thumbnails    []DVRThumbnail  `json:"thumbnails"`
+	ContentURIs   []DVRContentURI `json:"-"` // gameClipUris or screenshotUris
+	Type          DVRCaptureType  `json:"-"`
+}
+
+// GetDownloadLink returns the downloadable media URI for the capture. It prefers the
+// dedicated download URI and falls back to the first available URI, returning an empty
+// string if none exist.
 func (d *DVRCapture) GetDownloadLink() string {
-	for _, contentLocator := range d.ContentLocators {
-		if contentLocator.LocatorType == "Download" {
-			return contentLocator.URI
+	for _, contentURI := range d.ContentURIs {
+		if contentURI.URIType == dvrURITypeDownload {
+			return contentURI.URI
 		}
+	}
+
+	if len(d.ContentURIs) > 0 {
+		return d.ContentURIs[0].URI
 	}
 
 	return ""
@@ -71,19 +78,10 @@ func (d *DVRCapture) GetDownloadLink() string {
 type Clip struct {
 	DVRCapture
 
-	ContentSegments []struct {
-		ID                int         `json:"segmentId"`
-		CreationType      string      `json:"creationType"`
-		CreatorChannelID  interface{} `json:"creatorChannelId"`
-		CreatorXUID       int64       `json:"creatorXuid"`
-		RecordDate        time.Time   `json:"recordDate"`
-		DurationInSeconds int         `json:"durationInSeconds"`
-		Offset            int         `json:"offset"`
-		SecondaryTitleID  interface{} `json:"secondaryTitleId"`
-		TitleID           int         `json:"titleId"`
-	} `json:"contentSegments"` // Only exists for clips
-	DurationInSeconds int `json:"durationInSeconds"` // Only exists for clips
-	FrameRate         int `json:"frameRate"`         // Only exists for clips
+	GameClipID        string          `json:"gameClipId"`
+	DateRecorded      time.Time       `json:"dateRecorded"`
+	DurationInSeconds int             `json:"durationInSeconds"`
+	GameClipURIs      []DVRContentURI `json:"gameClipUris"`
 }
 
 func (c *Client) DeleteDVRClip(ctx context.Context, id string) error {
@@ -96,8 +94,10 @@ func (c *Client) DeleteDVRClip(ctx context.Context, id string) error {
 
 func (c *Client) GetDVRClips(ctx context.Context, continuationToken string) ([]*Clip, string, error) {
 	response := struct {
-		ContinuationToken string  `json:"continuationToken"`
-		Clips             []*Clip `json:"values"`
+		Clips      []*Clip `json:"gameClips"`
+		PagingInfo struct {
+			ContinuationToken string `json:"continuationToken"`
+		} `json:"pagingInfo"`
 	}{}
 
 	// If a continuation token (their version of pagination) is supplied, pass it to the API.
@@ -114,25 +114,32 @@ func (c *Client) GetDVRClips(ctx context.Context, continuationToken string) ([]*
 		return nil, "", errors.New("find clips")
 	}
 
-	for index := range response.Clips {
-		response.Clips[index].Type = DVRCaptureTypeClip
+	for _, clip := range response.Clips {
+		clip.ID = clip.GameClipID
+		clip.UploadDate = clip.DateRecorded
+		clip.ContentURIs = clip.GameClipURIs
+		clip.Type = DVRCaptureTypeClip
 	}
 
-	return response.Clips, response.ContinuationToken, nil
+	return response.Clips, response.PagingInfo.ContinuationToken, nil
 }
 
 type Screenshot struct {
 	DVRCapture
+
+	ScreenshotID     string          `json:"screenshotId"`
+	DateTaken        time.Time       `json:"dateTaken"`
+	ResolutionHeight int             `json:"resolutionHeight"`
+	ResolutionWidth  int             `json:"resolutionWidth"`
+	ScreenshotURIs   []DVRContentURI `json:"screenshotUris"`
 }
 
 func (c *Client) GetDVRScreenshots(ctx context.Context, continuationToken string) ([]*Screenshot, string, error) {
 	response := struct {
-		ContinuationToken string `json:"continuationToken"`
-		Screenshots       []*struct {
-			DVRCapture
-
-			DateUploaded time.Time `json:"dateUploaded"`
-		} `json:"values"`
+		Screenshots []*Screenshot `json:"screenshots"`
+		PagingInfo  struct {
+			ContinuationToken string `json:"continuationToken"`
+		} `json:"pagingInfo"`
 	}{}
 
 	// If a continuation token (their version of pagination) is supplied, pass it to the API.
@@ -149,16 +156,14 @@ func (c *Client) GetDVRScreenshots(ctx context.Context, continuationToken string
 		return nil, "", errors.New("find screenshots")
 	}
 
-	screenshots := make([]*Screenshot, 0, len(response.Screenshots))
-
-	for index := range response.Screenshots {
-		screenshot := Screenshot{DVRCapture: response.Screenshots[index].DVRCapture}
-		screenshot.DVRCapture.Type = DVRCaptureTypeScreenshot
-		screenshot.UploadDate = response.Screenshots[index].DateUploaded
-		screenshots = append(screenshots, &screenshot)
+	for _, screenshot := range response.Screenshots {
+		screenshot.ID = screenshot.ScreenshotID
+		screenshot.UploadDate = screenshot.DateTaken
+		screenshot.ContentURIs = screenshot.ScreenshotURIs
+		screenshot.Type = DVRCaptureTypeScreenshot
 	}
 
-	return screenshots, response.ContinuationToken, nil
+	return response.Screenshots, response.PagingInfo.ContinuationToken, nil
 }
 
 func (c *Client) SetDVRPrivacy(ctx context.Context, privacy DVRPrivacy) error {

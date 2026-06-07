@@ -72,17 +72,17 @@ func (c *Client) GetFriends(ctx context.Context) ([]*Friend, error) {
 	return response.Friends, nil
 }
 
-// GetPresenceForFriends returns the current Presence for your friends.
-func (c *Client) GetPresenceForFriends(ctx context.Context) ([]*Presence, error) {
-	var response []*Presence
+// GetPresence returns the current Presence for the authenticated account.
+func (c *Client) GetPresence(ctx context.Context) (*Presence, error) {
+	var response Presence
 
 	if _, err := c.makeRequest(ctx, http.MethodGet, "presence", nil, &response); err != nil {
 		return nil, err
 	}
 
-	if len(response) == 0 {
-		return nil, errors.New("find friend presences")
+	if response.ID == "" {
+		return nil, errors.New("find presence")
 	}
 
-	return response, nil
+	return &response, nil
 }
