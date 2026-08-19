@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-const url = "https://api.xbl.io/v2/"
+const apiURL = "https://api.xbl.io/v2/"
 
 type Client struct {
 	apiKey     string

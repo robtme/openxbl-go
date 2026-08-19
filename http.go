@@ -21,7 +21,7 @@ func (c *Client) makeRequest(ctx context.Context, method string, endpoint string
 		}
 	}
 
-	req, err := http.NewRequestWithContext(ctx, strings.ToUpper(method), url+endpoint, bytes.NewBuffer(requestBytes))
+	req, err := http.NewRequestWithContext(ctx, strings.ToUpper(method), apiURL+endpoint, bytes.NewBuffer(requestBytes))
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
