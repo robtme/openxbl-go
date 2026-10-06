@@ -1,4 +1,4 @@
-PROJECT			 := github.com/wolveix/openxbl-go
+PROJECT			 := github.com/robtme/openxbl-go
 GO				 := $(shell which go 2>/dev/null)
 GOFUMPT			 := $(shell which gofumpt 2>/dev/null)
 GOLINTER		 := $(shell which golangci-lint 2>/dev/null)

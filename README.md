@@ -20,7 +20,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/wolveix/openxbl-go"
+	"github.com/robtme/openxbl-go"
 )
 
 func main() {
