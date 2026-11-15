@@ -10,12 +10,15 @@ import (
 // Title is a game in a player's history, with whatever decorations the endpoint
 // returning it supplies. The achievements endpoints return the same shape.
 type Title struct {
-	TitleID      string   `json:"titleId"`
-	Name         string   `json:"name"`
-	Type         string   `json:"type"`
-	Devices      []string `json:"devices"`
-	DisplayImage string   `json:"displayImage"`
-	Achievement  struct {
+	TitleID string `json:"titleId"`
+	// ModernTitleID is set on an Xbox 360 title to the ID it runs under through
+	// backward compatibility, which is where its playtime is recorded.
+	ModernTitleID string   `json:"modernTitleId"`
+	Name          string   `json:"name"`
+	Type          string   `json:"type"`
+	Devices       []string `json:"devices"`
+	DisplayImage  string   `json:"displayImage"`
+	Achievement   struct {
 		CurrentAchievements int     `json:"currentAchievements"`
 		TotalAchievements   int     `json:"totalAchievements"`
 		CurrentGamerscore   int     `json:"currentGamerscore"`
